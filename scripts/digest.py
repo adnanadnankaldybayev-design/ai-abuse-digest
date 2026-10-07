@@ -9,10 +9,12 @@
 Переменные окружения (Secrets в GitHub):
   TELEGRAM_BOT_TOKEN, OWNER_CHAT_ID,
   optional: GITHUB_TOKEN (в Actions подставляется автоматически),
-  LOOKBACK_HOURS=25, MAX_RESULTS_PER_QUERY=10, QUERY_DELAY_SEC=7
+  LOOKBACK_HOURS=25, MAX_RESULTS_PER_QUERY=10, QUERY_DELAY_SEC=7,
+  MANUAL_QUERY="" — если задан, ищет только этот запрос (топ-5, без seen.json).
 """
 from __future__ import annotations
 
+import explain
 import html
 import json
 import os
@@ -51,12 +53,26 @@ GH_TOKEN = os.getenv("GITHUB_TOKEN", "")
 LOOKBACK_HOURS = int(os.getenv("LOOKBACK_HOURS", "25"))
 PER_QUERY = int(os.getenv("MAX_RESULTS_PER_QUERY", "10"))
 DELAY = float(os.getenv("QUERY_DELAY_SEC", "7"))
+MANUAL_QUERY = os.getenv("MANUAL_QUERY", "").strip()
 
 
-def gh_search(query: str, created_after: str) -> list[dict]:
+def load_seen() -> set[str]:
+    if SEEN_FILE.exists():
+        try:
+            return set(json.loads(SEEN_FILE.read_text(encoding="utf-8")).get("urls", []))
+        except Exception:
+            pass
+    return set()
+
+
+def save_seen(seen: set[str]) -> None:
+    SEEN_FILE.write_text(json.dumps({"urls": list(seen)[-MAX_SEEN:]}), encoding="utf-8")
+
+
+def gh_search(query: str, created_after: str = "") -> list[dict]:
     # sort=created у GitHub search НЕ существует (молча игнорируется),
     # свежесть задаём квалификатором created:>YYYY-MM-DD
-    q = f"{query} created:>{created_after}"
+    q = f"{query} created:>{created_after}" if created_after else query
     params = urllib.parse.urlencode(
         {"q": q, "sort": "updated", "order": "desc", "per_page": PER_QUERY}
     )
@@ -99,16 +115,15 @@ def fmt(repo: dict, query: str) -> str:
     created = (repo.get("created_at") or "")[:10]
     q = html.escape(query)
     return (f"🚨 <b>{name}</b> ⭐ {stars}\n📝 {desc}\n"
-            f"💻 {lang} | Создан: {created}\n🔎 <i>{q}</i>\n🔗 {url}")
+            f"💻 {lang} | Создан: {created}\n🔎 <i>{q}</i>\n🔗 {url}\n"
+            f"{explain.repo_ru(repo)}")
 
 
 def main() -> None:
-    seen: set[str] = set()
-    if SEEN_FILE.exists():
-        try:
-            seen = set(json.loads(SEEN_FILE.read_text(encoding="utf-8")).get("urls", []))
-        except Exception:
-            pass
+    if MANUAL_QUERY:
+        manual_search(MANUAL_QUERY)
+        return
+    seen = load_seen()
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
     created_after = cutoff.strftime("%Y-%m-%d")
@@ -147,9 +162,24 @@ def main() -> None:
         time.sleep(1)
 
     # чистим хвост seen, чтобы файл не рос бесконечно
-    seen_list = list(seen)[-MAX_SEEN:]
-    SEEN_FILE.write_text(json.dumps({"urls": seen_list}), encoding="utf-8")
-    print(f"sent: {sent}, seen total: {len(seen_list)}")
+    save_seen(seen)
+    print(f"sent: {sent}, seen total: {min(len(seen), MAX_SEEN)}")
+
+
+def manual_search(query: str) -> None:
+    """Ручной поиск по запросу из чата: топ-5 без фильтра даты, seen.json не трогаем."""
+    items = gh_search(query)
+    print(f"manual results: {len(items)}")
+    if not items:
+        tg_send(f"🔎 По запросу <i>{html.escape(query)}</i> ничего не нашлось.",
+                )
+    for repo in items[:5]:
+        try:
+            tg_send(fmt(repo, query))
+        except Exception as e:
+            print(f"send failed [{repo.get('html_url')}]: {e}")
+        time.sleep(1)
+    print("manual done (seen.json untouched)")
 
 
 if __name__ == "__main__":

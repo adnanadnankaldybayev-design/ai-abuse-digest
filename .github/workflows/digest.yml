@@ -3,7 +3,12 @@ name: ai-abuse-digest
 on:
   schedule:
     - cron: "17 * * * *"   # каждый час, на 17-й минуте
-  workflow_dispatch: {}    # + кнопка ручного запуска
+  workflow_dispatch:
+    inputs:
+      query:
+        description: "Ручной поиск (пусто = обычный часовой дайджест)"
+        required: false
+        default: ""
 
 permissions:
   contents: write          # нужно, чтобы коммитить seen.json
@@ -25,7 +30,16 @@ jobs:
           OWNER_CHAT_ID: ${{ secrets.OWNER_CHAT_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOOKBACK_HOURS: "25"
+          MANUAL_QUERY: ${{ inputs.query }}
         run: python scripts/digest.py
+
+      - name: Run X watch (needs X_BEARER_TOKEN secret, else skipped)
+        if: ${{ inputs.query == '' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          OWNER_CHAT_ID: ${{ secrets.OWNER_CHAT_ID }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+        run: python scripts/x_watch.py
 
       - name: Save seen state
         run: |
