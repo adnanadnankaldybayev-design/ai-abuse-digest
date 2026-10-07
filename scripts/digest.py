@@ -45,6 +45,19 @@ QUERIES = [
     "free AI chatbot",
     "ChatGPT free account",
     "free AI tokens",
+    "DeepSeek free API",
+    "free Claude API",
+    "free Gemini API",
+    "free GPT-4o API",
+    "Qwen free API",
+    "open source LLM best",
+    "Ollama models",
+    "free AI no signup",
+    "Stable Diffusion free",
+    "Flux AI free image",
+    "free AI video generator",
+    "free voice cloning AI",
+    "free AI coding assistant",
 ]
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]

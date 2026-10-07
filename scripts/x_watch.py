@@ -27,6 +27,9 @@ X_QUERIES = [
     "uncensored LLM -is:retweet",
     "free ChatGPT API -is:retweet",
     "free GPT-4 -is:retweet",
+    "DeepSeek free -is:retweet",
+    "free AI video generator -is:retweet",
+    "Stable Diffusion free -is:retweet",
 ]
 
 
